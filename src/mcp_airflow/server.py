@@ -1,0 +1,228 @@
+import os
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+
+from mcp_airflow.client import AirflowClient, pagination_params
+from mcp_airflow.config import Settings
+
+mcp = FastMCP(
+    "airflow",
+    host=os.environ.get("MCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_PORT", "8000")),
+)
+
+_settings: Settings | None = None
+_client: AirflowClient | None = None
+
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def get_client() -> AirflowClient:
+    global _client
+    if _client is None:
+        _client = AirflowClient(get_settings())
+    return _client
+
+
+def _tag_name(tag: Any) -> str:
+    return tag["name"] if isinstance(tag, dict) else str(tag)
+
+
+def _dag_summary(dag: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dag_id": dag["dag_id"],
+        "description": dag.get("description"),
+        "tags": [_tag_name(tag) for tag in dag.get("tags", [])],
+        "is_paused": dag["is_paused"],
+        "schedule": dag.get("timetable_summary") or dag.get("schedule_interval"),
+    }
+
+
+@mcp.tool()
+async def list_dags(
+    tags: list[str] | None = None,
+    only_active: bool | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict[str, Any]]:
+    """List Airflow DAGs, optionally filtered by tag or active state."""
+    params: dict[str, Any] = pagination_params(limit, offset)
+    if tags:
+        params["tags"] = tags
+    if only_active is not None:
+        params["only_active"] = only_active
+
+    response = await get_client().request("GET", "/dags", params=params)
+    return [_dag_summary(dag) for dag in response.json()["dags"]]
+
+
+@mcp.tool()
+async def get_dag(dag_id: str) -> dict[str, Any]:
+    """Get metadata for a single Airflow DAG."""
+    response = await get_client().request("GET", f"/dags/{dag_id}")
+    dag = response.json()
+    return {
+        **_dag_summary(dag),
+        "owners": dag.get("owners", []),
+        "next_dagrun": dag.get("next_dagrun_logical_date"),
+    }
+
+
+def _dag_run_summary(dag_run: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dag_run_id": dag_run["dag_run_id"],
+        "state": dag_run["state"],
+        "logical_date": dag_run.get("logical_date"),
+        "start_date": dag_run.get("start_date"),
+        "end_date": dag_run.get("end_date"),
+    }
+
+
+@mcp.tool()
+async def list_dag_runs(
+    dag_id: str,
+    state: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """List DAG run history for a given DAG."""
+    params: dict[str, Any] = pagination_params(limit)
+    if state:
+        params["state"] = state
+
+    response = await get_client().request("GET", f"/dags/{dag_id}/dagRuns", params=params)
+    return [_dag_run_summary(dag_run) for dag_run in response.json()["dag_runs"]]
+
+
+@mcp.tool()
+async def get_dag_run(dag_id: str, dag_run_id: str) -> dict[str, Any]:
+    """Get details for a single DAG run, including its trigger conf."""
+    response = await get_client().request("GET", f"/dags/{dag_id}/dagRuns/{dag_run_id}")
+    dag_run = response.json()
+    return {**_dag_run_summary(dag_run), "conf": dag_run.get("conf", {})}
+
+
+@mcp.tool()
+async def list_task_instances(dag_id: str, dag_run_id: str) -> list[dict[str, Any]]:
+    """List task instances and their state for a given DAG run."""
+    response = await get_client().request(
+        "GET", f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances"
+    )
+    return [
+        {
+            "task_id": ti["task_id"],
+            "state": ti["state"],
+            "duration": ti.get("duration"),
+            "try_number": ti.get("try_number"),
+        }
+        for ti in response.json()["task_instances"]
+    ]
+
+
+def _truncate_log(content: str, max_lines: int) -> str:
+    lines = content.splitlines()
+    if len(lines) <= max_lines:
+        return content
+    omitted = len(lines) - max_lines
+    truncated = "\n".join(lines[:max_lines])
+    return f"{truncated}\n... ({omitted} more lines truncated)"
+
+
+@mcp.tool()
+async def get_task_logs(
+    dag_id: str,
+    dag_run_id: str,
+    task_id: str,
+    try_number: int = 1,
+) -> str:
+    """Get logs for a task instance, truncated to AIRFLOW_LOG_MAX_LINES."""
+    response = await get_client().request(
+        "GET",
+        f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}",
+        params={"full_content": True},
+    )
+    content = response.json().get("content", "")
+    return _truncate_log(content, get_settings().log_max_lines)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Trigger DAG run",
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+    )
+)
+async def trigger_dag_run(
+    dag_id: str,
+    conf: dict[str, Any] | None = None,
+    logical_date: str | None = None,
+) -> dict[str, Any]:
+    """Trigger a new DAG run. Sensitive: creates a new, irreversible execution."""
+    body: dict[str, Any] = {}
+    if conf is not None:
+        body["conf"] = conf
+    if logical_date is not None:
+        body["logical_date"] = logical_date
+
+    response = await get_client().request(
+        "POST",
+        f"/dags/{dag_id}/dagRuns",
+        json=body,
+        timeout=get_settings().trigger_timeout,
+    )
+    return _dag_run_summary(response.json())
+
+
+async def _set_paused(dag_id: str, is_paused: bool) -> dict[str, Any]:
+    response = await get_client().request(
+        "PATCH",
+        f"/dags/{dag_id}",
+        params={"update_mask": "is_paused"},
+        json={"is_paused": is_paused},
+    )
+    return _dag_summary(response.json())
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Pause DAG",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
+)
+async def pause_dag(dag_id: str) -> dict[str, Any]:
+    """Pause a DAG. Reversible, but affects the shared scheduler."""
+    return await _set_paused(dag_id, True)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Unpause DAG",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
+)
+async def unpause_dag(dag_id: str) -> dict[str, Any]:
+    """Resume a paused DAG."""
+    return await _set_paused(dag_id, False)
+
+
+def main() -> None:
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    if transport == "streamable-http":
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
+
+
+if __name__ == "__main__":
+    main()
