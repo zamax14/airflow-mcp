@@ -31,6 +31,14 @@ The server is general-purpose: point it at any Airflow 2.x/3.x instance via `AIR
 - [uv](https://docs.astral.sh/uv/)
 - An Apache Airflow instance reachable over HTTP, with a user that has at least `Viewer` role (`Op` if you need the write tools)
 
+### Least privilege
+
+Use a dedicated Airflow user for this server, scoped to the minimum role it needs:
+
+- `Viewer` is enough if you only register the read-only tools.
+- `Op` is required if you also register `trigger_dag_run`, `pause_dag` or `unpause_dag`.
+- Never point this server at an `Admin` account unless you have a specific reason to.
+
 ## Setup
 
 ```bash
