@@ -12,3 +12,6 @@ class Settings(BaseSettings):
     username: str | None = None
     password: SecretStr | None = None
     token: SecretStr | None = None
+    request_timeout: float = 10
+    trigger_timeout: float = 30
+    log_max_lines: int = 500
