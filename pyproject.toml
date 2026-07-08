@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-airflow"
+version = "0.1.0"
+description = "MCP server exposing Apache Airflow REST API operations to AI agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.2.0",
+    "httpx>=0.27",
+    "pydantic-settings>=2.5",
+]
+
+[project.scripts]
+mcp-airflow = "mcp_airflow.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.21",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_airflow"]
