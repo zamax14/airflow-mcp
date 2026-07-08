@@ -39,6 +39,14 @@ Use a dedicated Airflow user for this server, scoped to the minimum role it need
 - `Op` is required if you also register `trigger_dag_run`, `pause_dag` or `unpause_dag`.
 - Never point this server at an `Admin` account unless you have a specific reason to.
 
+## Quickstart
+
+```bash
+./install.sh
+```
+
+Detects whether you have Docker or uv installed, sets up `.env` (from `.env.example`, if missing), builds the image or syncs dependencies accordingly, and prints the `.mcp.json` snippet to register the server.
+
 ## Setup
 
 ```bash
