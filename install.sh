@@ -2,6 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+if [ ! -f .env ]; then
+  cp .env.example .env
+  echo "Created .env from .env.example — edit it with your Airflow credentials before running."
+fi
+
 if command -v docker >/dev/null 2>&1; then
   echo "Docker found — building image..."
   docker build -t mcp-airflow .
