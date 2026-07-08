@@ -37,6 +37,7 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
+plugins = ["pydantic.mypy"]
 python_version = "3.12"
 disallow_untyped_defs = true
 files = ["src/mcp_airflow"]
