@@ -168,6 +168,28 @@ async def trigger_dag_run(
     return _dag_run_summary(response.json())
 
 
+async def _set_paused(dag_id: str, is_paused: bool) -> dict[str, Any]:
+    response = await get_client().request(
+        "PATCH",
+        f"/dags/{dag_id}",
+        params={"update_mask": "is_paused"},
+        json={"is_paused": is_paused},
+    )
+    return _dag_summary(response.json())
+
+
+@mcp.tool()
+async def pause_dag(dag_id: str) -> dict[str, Any]:
+    """Pause a DAG. Reversible, but affects the shared scheduler."""
+    return await _set_paused(dag_id, True)
+
+
+@mcp.tool()
+async def unpause_dag(dag_id: str) -> dict[str, Any]:
+    """Resume a paused DAG."""
+    return await _set_paused(dag_id, False)
+
+
 def main() -> None:
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "streamable-http":
