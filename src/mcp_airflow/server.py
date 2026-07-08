@@ -95,6 +95,23 @@ async def get_dag_run(dag_id: str, dag_run_id: str) -> dict[str, Any]:
     return {**_dag_run_summary(dag_run), "conf": dag_run.get("conf", {})}
 
 
+@mcp.tool()
+async def list_task_instances(dag_id: str, dag_run_id: str) -> list[dict[str, Any]]:
+    """List task instances and their state for a given DAG run."""
+    response = await get_client().request(
+        "GET", f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances"
+    )
+    return [
+        {
+            "task_id": ti["task_id"],
+            "state": ti["state"],
+            "duration": ti.get("duration"),
+            "try_number": ti.get("try_number"),
+        }
+        for ti in response.json()["task_instances"]
+    ]
+
+
 def main() -> None:
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "streamable-http":
