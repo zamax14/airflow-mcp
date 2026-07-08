@@ -8,13 +8,21 @@ from mcp_airflow.config import Settings
 
 mcp = FastMCP("airflow")
 
+_settings: Settings | None = None
 _client: AirflowClient | None = None
+
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
 
 
 def get_client() -> AirflowClient:
     global _client
     if _client is None:
-        _client = AirflowClient(Settings())
+        _client = AirflowClient(get_settings())
     return _client
 
 
@@ -110,6 +118,32 @@ async def list_task_instances(dag_id: str, dag_run_id: str) -> list[dict[str, An
         }
         for ti in response.json()["task_instances"]
     ]
+
+
+def _truncate_log(content: str, max_lines: int) -> str:
+    lines = content.splitlines()
+    if len(lines) <= max_lines:
+        return content
+    omitted = len(lines) - max_lines
+    truncated = "\n".join(lines[:max_lines])
+    return f"{truncated}\n... ({omitted} more lines truncated)"
+
+
+@mcp.tool()
+async def get_task_logs(
+    dag_id: str,
+    dag_run_id: str,
+    task_id: str,
+    try_number: int = 1,
+) -> str:
+    """Get logs for a task instance, truncated to AIRFLOW_LOG_MAX_LINES."""
+    response = await get_client().request(
+        "GET",
+        f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}",
+        params={"full_content": True},
+    )
+    content = response.json().get("content", "")
+    return _truncate_log(content, get_settings().log_max_lines)
 
 
 def main() -> None:
