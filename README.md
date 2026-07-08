@@ -48,6 +48,27 @@ cp .env.example .env
 
 Fill in `.env` with your Airflow instance's URL and credentials.
 
+## Docker
+
+No local Python/uv needed — build once, run anywhere Docker runs:
+
+```bash
+docker build -t mcp-airflow .
+cp .env.example .env  # fill in your Airflow credentials
+```
+
+Run in stdio mode (default, for MCP clients that spawn the process):
+
+```bash
+docker run -i --rm --env-file .env mcp-airflow
+```
+
+Run in streamable-http mode (standalone service, listens on `:8000`):
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env -e MCP_TRANSPORT=streamable-http mcp-airflow
+```
+
 ## Registering with an MCP client
 
 ### stdio (recommended for local development)
@@ -69,9 +90,22 @@ Fill in `.env` with your Airflow instance's URL and credentials.
 }
 ```
 
+### stdio via Docker
+
+```json
+{
+  "mcpServers": {
+    "airflow": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--env-file", ".env", "mcp-airflow"]
+    }
+  }
+}
+```
+
 ### streamable-http (server running as a standalone process)
 
-Start the server with `MCP_TRANSPORT=streamable-http uv run mcp-airflow`, then register:
+Start the server with `MCP_TRANSPORT=streamable-http uv run mcp-airflow` (or the Docker command above), then register:
 
 ```json
 {
