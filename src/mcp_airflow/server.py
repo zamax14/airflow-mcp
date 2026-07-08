@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mcp_airflow.client import AirflowClient, pagination_params
 from mcp_airflow.config import Settings
@@ -144,6 +145,71 @@ async def get_task_logs(
     )
     content = response.json().get("content", "")
     return _truncate_log(content, get_settings().log_max_lines)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Trigger DAG run",
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+    )
+)
+async def trigger_dag_run(
+    dag_id: str,
+    conf: dict[str, Any] | None = None,
+    logical_date: str | None = None,
+) -> dict[str, Any]:
+    """Trigger a new DAG run. Sensitive: creates a new, irreversible execution."""
+    body: dict[str, Any] = {}
+    if conf is not None:
+        body["conf"] = conf
+    if logical_date is not None:
+        body["logical_date"] = logical_date
+
+    response = await get_client().request(
+        "POST",
+        f"/dags/{dag_id}/dagRuns",
+        json=body,
+        timeout=get_settings().trigger_timeout,
+    )
+    return _dag_run_summary(response.json())
+
+
+async def _set_paused(dag_id: str, is_paused: bool) -> dict[str, Any]:
+    response = await get_client().request(
+        "PATCH",
+        f"/dags/{dag_id}",
+        params={"update_mask": "is_paused"},
+        json={"is_paused": is_paused},
+    )
+    return _dag_summary(response.json())
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Pause DAG",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
+)
+async def pause_dag(dag_id: str) -> dict[str, Any]:
+    """Pause a DAG. Reversible, but affects the shared scheduler."""
+    return await _set_paused(dag_id, True)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Unpause DAG",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
+)
+async def unpause_dag(dag_id: str) -> dict[str, Any]:
+    """Resume a paused DAG."""
+    return await _set_paused(dag_id, False)
 
 
 def main() -> None:
