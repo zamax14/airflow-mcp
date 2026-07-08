@@ -18,7 +18,9 @@ def pagination_params(limit: int | None = None, offset: int | None = None) -> di
 
 
 class AirflowClient:
-    def __init__(self, settings: Settings, max_retries: int = 3, backoff_seconds: float = 0.5) -> None:
+    def __init__(
+        self, settings: Settings, max_retries: int = 3, backoff_seconds: float = 0.5
+    ) -> None:
         self._settings = settings
         self._max_retries = max_retries
         self._backoff_seconds = backoff_seconds
