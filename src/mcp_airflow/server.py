@@ -62,6 +62,39 @@ async def get_dag(dag_id: str) -> dict[str, Any]:
     }
 
 
+def _dag_run_summary(dag_run: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dag_run_id": dag_run["dag_run_id"],
+        "state": dag_run["state"],
+        "logical_date": dag_run.get("logical_date"),
+        "start_date": dag_run.get("start_date"),
+        "end_date": dag_run.get("end_date"),
+    }
+
+
+@mcp.tool()
+async def list_dag_runs(
+    dag_id: str,
+    state: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """List DAG run history for a given DAG."""
+    params: dict[str, Any] = pagination_params(limit)
+    if state:
+        params["state"] = state
+
+    response = await get_client().request("GET", f"/dags/{dag_id}/dagRuns", params=params)
+    return [_dag_run_summary(dag_run) for dag_run in response.json()["dag_runs"]]
+
+
+@mcp.tool()
+async def get_dag_run(dag_id: str, dag_run_id: str) -> dict[str, Any]:
+    """Get details for a single DAG run, including its trigger conf."""
+    response = await get_client().request("GET", f"/dags/{dag_id}/dagRuns/{dag_run_id}")
+    dag_run = response.json()
+    return {**_dag_run_summary(dag_run), "conf": dag_run.get("conf", {})}
+
+
 def main() -> None:
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "streamable-http":
