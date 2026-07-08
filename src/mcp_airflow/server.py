@@ -7,7 +7,11 @@ from mcp.types import ToolAnnotations
 from mcp_airflow.client import AirflowClient, pagination_params
 from mcp_airflow.config import Settings
 
-mcp = FastMCP("airflow")
+mcp = FastMCP(
+    "airflow",
+    host=os.environ.get("MCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_PORT", "8000")),
+)
 
 _settings: Settings | None = None
 _client: AirflowClient | None = None
