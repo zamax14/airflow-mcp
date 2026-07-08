@@ -8,6 +8,15 @@ from mcp_airflow.config import Settings
 API_PREFIX = "/api/v2"
 
 
+def pagination_params(limit: int | None = None, offset: int | None = None) -> dict[str, int]:
+    params: dict[str, int] = {}
+    if limit is not None:
+        params["limit"] = limit
+    if offset is not None:
+        params["offset"] = offset
+    return params
+
+
 class AirflowClient:
     def __init__(self, settings: Settings, max_retries: int = 3, backoff_seconds: float = 0.5) -> None:
         self._settings = settings
