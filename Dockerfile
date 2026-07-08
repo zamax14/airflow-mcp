@@ -12,6 +12,7 @@ COPY README.md ./
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV MCP_HOST=0.0.0.0
 
 EXPOSE 8000
 
