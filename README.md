@@ -48,6 +48,41 @@ cp .env.example .env
 
 Fill in `.env` with your Airflow instance's URL and credentials.
 
+## Registering with an MCP client
+
+### stdio (recommended for local development)
+
+```json
+{
+  "mcpServers": {
+    "airflow": {
+      "command": "uv",
+      "args": ["run", "mcp-airflow"],
+      "env": {
+        "AIRFLOW_BASE_URL": "http://localhost:8080",
+        "AIRFLOW_AUTH_MODE": "basic",
+        "AIRFLOW_USERNAME": "airflow",
+        "AIRFLOW_PASSWORD": "airflow"
+      }
+    }
+  }
+}
+```
+
+### streamable-http (server running as a standalone process)
+
+Start the server with `MCP_TRANSPORT=streamable-http uv run mcp-airflow`, then register:
+
+```json
+{
+  "mcpServers": {
+    "airflow": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
 ## Development
 
 ```bash
