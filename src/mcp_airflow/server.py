@@ -146,6 +146,28 @@ async def get_task_logs(
     return _truncate_log(content, get_settings().log_max_lines)
 
 
+@mcp.tool()
+async def trigger_dag_run(
+    dag_id: str,
+    conf: dict[str, Any] | None = None,
+    logical_date: str | None = None,
+) -> dict[str, Any]:
+    """Trigger a new DAG run. Sensitive: creates a new, irreversible execution."""
+    body: dict[str, Any] = {}
+    if conf is not None:
+        body["conf"] = conf
+    if logical_date is not None:
+        body["logical_date"] = logical_date
+
+    response = await get_client().request(
+        "POST",
+        f"/dags/{dag_id}/dagRuns",
+        json=body,
+        timeout=get_settings().trigger_timeout,
+    )
+    return _dag_run_summary(response.json())
+
+
 def main() -> None:
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "streamable-http":
